@@ -1764,7 +1764,7 @@ public class Server implements Runnable {
                 r.messageId = 7005;
             } else {
                 r.messageId = 7010;
-                r.add(Server.getColorForPlayer(player));
+                r.add(player.getColorForPlayer());
             }
         } else {
             // Team victory
@@ -1784,7 +1784,7 @@ public class Server implements Runnable {
             r = new Report();
             r.type = Report.PUBLIC;
             r.messageId = 7016;
-            r.add(Server.getColorForPlayer(player));
+            r.add(player.getColorForPlayer());
             r.add(player.getBV());
             r.add(Double.toString(Math.round((double) player.getBV() / player.getInitialBV() * 10000.0) / 100.0));
             r.add(player.getInitialBV());
@@ -1926,11 +1926,9 @@ public class Server implements Runnable {
     public void forceVictory(IPlayer victor) {
         game.setForceVictory(true);
         if (victor.getTeam() == IPlayer.TEAM_NONE) {
-            game.setVictoryPlayerId(victor.getId());
-            game.setVictoryTeam(IPlayer.TEAM_NONE);
+            game.setVictory(victor.getId(), IPlayer.TEAM_NONE);
         } else {
-            game.setVictoryPlayerId(IPlayer.PLAYER_NONE);
-            game.setVictoryTeam(victor.getTeam());
+            game.setVictory(IPlayer.PLAYER_NONE, victor.getTeam());
         }
 
         Vector<IPlayer> playersVector = game.getPlayersVector();
@@ -1938,15 +1936,6 @@ public class Server implements Runnable {
             IPlayer player = playersVector.elementAt(i);
             player.setAdmitsDefeat(false);
         }
-    }
-
-    /**
-     * Cancels the force victory
-     */
-    public void cancelVictory() {
-        game.setForceVictory(false);
-        game.setVictoryPlayerId(IPlayer.PLAYER_NONE);
-        game.setVictoryTeam(IPlayer.TEAM_NONE);
     }
 
     public void requestTeamChange(int team, IPlayer player) {
@@ -2448,7 +2437,7 @@ public class Server implements Runnable {
                         r.player = player.getId();
                     }
                     r.messageId = 7016;
-                    r.add(Server.getColorForPlayer(player));
+                    r.add(player.getColorForPlayer());
                     r.add(player.getBV());
                     r.add(Double.toString(Math.round((double) player.getBV() / player.getInitialBV() * 10000.0) / 100.0));
                     r.add(player.getInitialBV());
@@ -3302,44 +3291,15 @@ public class Server implements Runnable {
      * add some reports to reporting
      */
     public boolean victory() {
-        VictoryResult vr = game.getVictory().checkForVictory(game, game.getVictoryContext());
+        VictoryResult vr = game.getVictoryResult();
         for (Report r : vr.getReports()) {
             addReport(r);
         }
-
-        if (vr.victory()) {
-            boolean draw = vr.isDraw();
-            int wonPlayer = vr.getWinningPlayer();
-            int wonTeam = vr.getWinningTeam();
-
-            if (wonPlayer != IPlayer.PLAYER_NONE) {
-                Report r = new Report(7200, Report.PUBLIC);
-                r.add(Server.getColorForPlayer(game.getPlayer(wonPlayer)));
-                addReport(r);
-            }
-            if (wonTeam != IPlayer.TEAM_NONE) {
-                Report r = new Report(7200, Report.PUBLIC);
-                r.add("Team " + wonTeam);
-                addReport(r);
-            }
-            if (draw) {
-                // multiple-won draw
-                game.setVictoryPlayerId(IPlayer.PLAYER_NONE);
-                game.setVictoryTeam(IPlayer.TEAM_NONE);
-            } else {
-                // nobody-won draw or
-                // single player won or
-                // single team won
-                game.setVictoryPlayerId(wonPlayer);
-                game.setVictoryTeam(wonTeam);
-            }
-        } else {
-            game.setVictoryPlayerId(IPlayer.PLAYER_NONE);
-            game.setVictoryTeam(IPlayer.TEAM_NONE);
-            if (game.isForceVictory()) {
-                cancelVictory();
-            }
+        
+        for (Report r : vr.handleReports(game)) {
+            addReport(r);
         }
+        
         return vr.victory();
     }// end victory
 
@@ -3835,9 +3795,6 @@ public class Server implements Runnable {
         send(createTurnVectorPacket());
     }
 
-    private static String getColorForPlayer(IPlayer p) {
-        return "<B><font color='" + p.getColour().getHexString(0x00F0F0F0) + "'>" + p.getName() + "</font></B>";
-    }
 
     /**
      * Write the initiative results to the report
@@ -3885,7 +3842,7 @@ public class Server implements Runnable {
                     IPlayer player = getPlayer(t.getPlayerNum());
                     if (null != player) {
                         r = new Report(1050, Report.PUBLIC);
-                        r.add(Server.getColorForPlayer(player));
+                        r.add(player.getColorForPlayer());
                         addReport(r);
                     }
                 }
@@ -3904,7 +3861,7 @@ public class Server implements Runnable {
                 if (team.getNonObserverSize() == 1) {
                     final IPlayer player = team.getNonObserverPlayers().nextElement();
                     r = new Report(1015, Report.PUBLIC);
-                    r.add(Server.getColorForPlayer(player));
+                    r.add(player.getColorForPlayer());
                     r.add(team.getInitiative().toString());
                     addReport(r);
                 } else {

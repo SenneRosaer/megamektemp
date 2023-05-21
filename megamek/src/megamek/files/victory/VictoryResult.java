@@ -17,7 +17,10 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
+import megamek.common.IGame;
 import megamek.common.IPlayer;
 import megamek.common.Report;
 
@@ -28,9 +31,9 @@ import megamek.common.Report;
 public class VictoryResult implements IResult {
     protected boolean victory;
     protected Throwable tr;
-    protected ArrayList<Report> reports = new ArrayList<Report>();
-    protected HashMap<Integer, Double> playerScore = new HashMap<Integer, Double>();
-    protected HashMap<Integer, Double> teamScore = new HashMap<Integer, Double>();
+    protected ArrayList<Report> reports = new ArrayList<>();
+    protected HashMap<Integer, Double> playerScore = new HashMap<>();
+    protected HashMap<Integer, Double> teamScore = new HashMap<>();
     protected double hiScore = 0;
 
     protected VictoryResult(boolean win) {
@@ -57,42 +60,31 @@ public class VictoryResult implements IResult {
         return new VictoryResult(true, IPlayer.PLAYER_NONE, IPlayer.TEAM_NONE);
     }
 
-    public int getWinningPlayer() {
+    public int getWinningEntity(Map<Integer, Double> entityScore, int entity) {
         double max = Double.MIN_VALUE;
-        int maxPlayer = IPlayer.PLAYER_NONE;
+        int maxEntity = entity;
         boolean draw = false;
-        for (int i : playerScore.keySet()) {
-            if (playerScore.get(i) == max) {
+        for (Map.Entry<Integer, Double> entry:  entityScore.entrySet()) {
+            if (entry.getValue() == max) {
                 draw = true;
             }
-            if (playerScore.get(i) > max) {
+            if (entry.getValue() > max) {
                 draw = false;
-                max = playerScore.get(i);
-                maxPlayer = i;
+                max = entry.getValue();
+                maxEntity = entry.getKey();
             }
         }
         if (draw)
-            return IPlayer.PLAYER_NONE;
-        return maxPlayer;
+            return entity;
+        return maxEntity;
+    }
+
+    public int getWinningPlayer() {
+        return getWinningEntity(playerScore, IPlayer.PLAYER_NONE);
     }
 
     public int getWinningTeam() {
-        double max = Double.MIN_VALUE;
-        int maxTeam = IPlayer.TEAM_NONE;
-        boolean draw = false;
-        for (int i : teamScore.keySet()) {
-            if (teamScore.get(i) == max) {
-                draw = true;
-            }
-            if (teamScore.get(i) > max) {
-                draw = false;
-                max = teamScore.get(i);
-                maxTeam = i;
-            }
-        }
-        if (draw)
-            return IPlayer.TEAM_NONE;
-        return maxTeam;
+        return getWinningEntity(teamScore, IPlayer.TEAM_NONE);
     }
 
     protected void updateHiScore() {
@@ -188,5 +180,66 @@ public class VictoryResult implements IResult {
 
     public boolean isDraw() {
         return (getWinningPlayer() == IPlayer.PLAYER_NONE && getWinningTeam() == IPlayer.TEAM_NONE);
+    }
+
+    public List<Report> handleReports(IGame game) {
+        if (victory()) {
+            return handleReportsVictory(game);
+        } else {
+            return handleReportsLoss(game);
+        }
+    }
+
+    public List<Report> handleReportsVictory(IGame game) {
+        ArrayList<Report> proccessingReports = getReports() ;
+        boolean draw = isDraw();
+        int wonPlayer = getWinningPlayer();
+        int wonTeam = getWinningTeam();
+
+        if (wonPlayer != IPlayer.PLAYER_NONE) {
+            Report r = new Report(7200, Report.PUBLIC);
+            r.add(game.getPlayer(wonPlayer).getColorForPlayer());
+            proccessingReports.add(r);
+        }
+        if (wonTeam != IPlayer.TEAM_NONE) {
+            Report r = new Report(7200, Report.PUBLIC);
+            r.add("Team " + wonTeam);
+            proccessingReports.add(r);
+        }
+        if (draw) {
+            // multiple-won draw
+            game.setVictory(IPlayer.PLAYER_NONE, IPlayer.TEAM_NONE);
+        } else {
+            // nobody-won draw or
+            // single player won or
+            // single team won
+            game.setVictory(wonPlayer, wonTeam);
+        }
+        return proccessingReports;
+    }
+
+    public List<Report> handleReportsLoss(IGame game) {
+        game.setVictory(IPlayer.PLAYER_NONE, IPlayer.TEAM_NONE);
+        if (game.isForceVictory()) {
+            game.cancelVictory();
+        }
+        return getReports();
+    }
+
+
+    /**
+     * combine scores
+     * @param res victory result
+     */
+    public void combineScore(VictoryResult res){
+        for (Report r : res.getReports()) {
+            addReport(r);
+        }
+        for (int pl : res.getPlayers()) {
+            addPlayerScore(pl, getPlayerScore(pl) + res.getPlayerScore(pl));
+        }
+        for (int t : res.getTeams()) {
+            addTeamScore(t, getTeamScore(t) + res.getTeamScore(t));
+        }
     }
 }
